@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+
+artifacts/hf_cache/
+artifacts/models/
+artifacts/outputs/
+
