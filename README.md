@@ -1,18 +1,18 @@
 # Model-Agnostic Runtime Adaptors for Efficient Diffusion Inference
 
-This project studies how to reduce diffusion model inference cost while preserving output quality. The current baseline uses Stable Diffusion v1.5 with Hugging Face Diffusers. The first stage of the project focuses on downloading the model, running fixed baseline generations, and recording latency for later comparison.
+This repo benchmarks Stable Diffusion v1.5 under fixed-step baselines and an Ollama-guided exact-step controller. The current experiment keeps the model, scheduler family, resolution, and guidance scale fixed so the adaptation logic only changes `num_inference_steps`.
 
 ## Project Goal
 
-The long-term goal is to build a runtime adapter that improves diffusion inference efficiency without retraining the underlying model. The baseline stage establishes a reproducible setup for measuring inference latency and output quality before introducing optimization methods such as adaptive sampling, scheduler changes, and early stopping strategies.
+The research goal is to test whether a lightweight pre-inference controller can predict the minimum number of diffusion steps needed for a prompt while still preserving image quality. In the current prototype, Ollama makes that decision before the diffusion pipeline runs, and the benchmark records the selected step count alongside latency and output paths.
 
 ## Current Scope
 
 - Download and save Stable Diffusion v1.5 locally
-- Run baseline text-to-image inference
-- Save generated images
-- Record per-image latency and run metadata in CSV format
-- Prepare a clean structure for future optimization experiments
+- Run fixed-step baselines when needed for comparison
+- Run an `ollama_exact` mode that predicts one exact step count per prompt
+- Cache Ollama decisions for repeatability
+- Save generated images and per-prompt benchmark metadata to CSV
 
 ## Project Structure
 
@@ -23,123 +23,153 @@ The long-term goal is to build a runtime adapter that improves diffusion inferen
 │   ├── models/
 │   ├── outputs/
 │   └── results/
-├── scripts/
-│   ├── download_model.py
-│   └── run_baseline.py
 ├── src/
+│   ├── adaptive_diffusion/
+│   │   ├── llm/
+│   │   └── step_controller.py
+│   ├── benchmark_runner.py
+│   ├── baseline.py
+│   └── download_model.py
 ├── requirements.txt
 └── README.md
-``` 
+```
 
 ## Setup
 
 Create and activate a virtual environment from the project root:
-``` text 
+
+```text
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-## Install dependencies:
-``` text
+Install dependencies:
+
+```text
 pip install -r requirements.txt
 ```
 
 ## Model Download
 
-The model is downloaded from Hugging Face and saved locally for reproducible baseline experiments.
+Download and pin the Stable Diffusion v1.5 weights locally:
 
-Run:
-``` text
-python scripts/download_model.py
+```text
+python src/download_model.py
 ```
 
-This saves the baseline model to:
-```text 
+This saves the model under:
+
+```text
 artifacts/models/stable-diffusion-v1-5/
 ```
 
-## Baseline Inference
+## Fixed-Step Baselines
 
-Run baseline generation with fixed prompts and settings:
-``` text
-python scripts/run_baseline.py
+Run the reusable benchmark runner in fixed mode:
+
+```text
+python src/benchmark_runner.py \
+  --run-name baseline_50_expanded \
+  --step-policy fixed \
+  --steps 50 \
+  --prompt-file prompts_complexity.txt
 ```
 
-This script:
+Each run:
 
-* loads the local Stable Diffusion v1.5 model
+- loads the local Stable Diffusion v1.5 pipeline
+- generates one image per prompt
+- saves images to `artifacts/outputs/<run-name>/`
+- saves per-prompt metrics to `artifacts/results/<run-name>.csv`
 
-* generates one image per prompt
+The tracked 50-step reference run on this branch is `artifacts/results/baseline_50_expanded.csv`, which corresponds to the 8 prompts in `prompts_complexity.txt`.
 
-* saves output images in artifacts/outputs/baseline/
+## Ollama Exact-Step Mode
 
-* saves per-image metrics in artifacts/results/baseline_metrics.csv
+The adaptive mode calls Ollama once per prompt before image generation. Ollama predicts one exact integer step count, and that number is passed directly to the diffusion pipeline.
 
-## Metrics Recorded
+Set up Ollama locally first:
 
-The baseline CSV currently stores:
+```text
+export OLLAMA_URL=http://localhost:11434
+export OLLAMA_MODEL=phi4-mini
+```
 
-* prompt_id
+Run the adaptive benchmark:
 
-* prompt
+```text
+python src/benchmark_runner.py \
+  --run-name complexity_ollama_expanded_v2 \
+  --step-policy ollama_exact \
+  --prompt-file prompts_complexity.txt
+```
 
-* seed
+Optional controls:
 
-* steps
+```text
+python src/benchmark_runner.py \
+  --run-name ollama_exact_capped \
+  --step-policy ollama_exact \
+  --min-steps 1 \
+  --max-steps 100 \
+  --decision-cache artifacts/results/ollama_step_cache.jsonl \
+  --ollama-model phi4-mini
+```
 
-* guidance_scale
+### Reproducibility
 
-* height
+The exact-step controller stays deterministic by keeping these pieces fixed:
 
-* width
+- one system prompt
+- one user prompt template
+- one JSON schema
+- `temperature=0.0`
 
-* device
+Every prompt decision is cached in `artifacts/results/ollama_step_cache.jsonl` by normalized prompt, Ollama model, prompt-template version, and schema version. Disable cache reads and writes for a run with:
 
-* dtype
+```text
+python src/benchmark_runner.py --run-name ollama_no_cache --step-policy ollama_exact --no-decision-cache
+```
 
-* latency_seconds
+## CSV Fields
 
-* image_path
+The benchmark CSV includes:
 
-At this stage, the main measured metric is inference latency per generated image.
+- `run_name`
+- `prompt_id`
+- `prompt`
+- `seed`
+- `steps`
+- `step_policy`
+- `selected_steps`
+- `guidance_scale`
+- `scheduler`
+- `height`
+- `width`
+- `device`
+- `dtype`
+- `model_path`
+- `decision_confidence`
+- `decision_reason`
+- `decision_source`
+- `decision_subject_count`
+- `decision_scene_density`
+- `decision_realism_requirement`
+- `decision_lighting_complexity`
+- `decision_fine_detail_burden`
+- `ollama_model`
+- `latency_seconds`
+- `image_path`
 
-## Baseline Configuration
+In fixed mode, the decision-specific columns are left blank. In `ollama_exact` mode, they show the controller output and whether the decision came from `ollama` or `cache`.
 
-Current baseline settings:
+## Notes
 
-* Model: Stable Diffusion v1.5
-
-* Resolution: 512 x 512
-
-* Guidance scale: 7.5
-
-* Seed: 42
-
-* Inference steps: 50
-
-These values may later be compared against lower-step baselines such as 20-step generation.
-
-Notes
-
-* artifacts/hf_cache/ is used for Hugging Face cache and is not intended for version control.
-
-* artifacts/models/ stores the pinned local model used for experiments.
-
-* artifacts/outputs/ and artifacts/results/ can be tracked selectively to document baseline runs.
-
-* Large model weights and cache files should not be pushed to GitHub.
-
-## Next Steps
-
-* Add 20-step baseline comparison
-
-* Evaluate different schedulers
-
-* Log aggregate metrics such as mean latency
-
-* Add quality metrics such as CLIP score and LPIPS
-
-* Implement and benchmark runtime adaptation methods
+- `artifacts/hf_cache/` stores the Hugging Face cache and should not be committed.
+- `artifacts/models/` stores local model weights and should stay out of GitHub.
+- `artifacts/outputs/` and `artifacts/results/` can be tracked selectively for experiment records.
+- The current tracked experiment records are the 8-prompt fixed-step baseline in `artifacts/results/baseline_50_expanded.csv` and the 8-prompt adaptive run in `artifacts/results/complexity_ollama_expanded_v2.csv`.
+- The current prototype evaluates quality mainly by comparing adaptive outputs to fixed-step baselines, especially the existing 50-step reference runs.
 
 ## License
 
