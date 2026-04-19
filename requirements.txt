@@ -1,5 +1,8 @@
 huggingface_hub
 diffusers
+torch
 transformers
 accelerate
-safetensors 
+safetensors
+requests
+pytest
