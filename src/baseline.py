@@ -3,7 +3,6 @@ import csv
 import time
 
 import torch
-from diffusers import StableDiffusionPipeline
 
 
 MODEL_PATH = "artifacts/models/stable-diffusion-v1-5"
@@ -29,8 +28,28 @@ WIDTH = 512
 def get_device_and_dtype():
     if torch.backends.mps.is_available():
         return "mps", torch.float16
-    else:
-        print("MPS is not available. Falling back to CPU, which may be very slow. Consider using a GPU for better performance or use CUDA for your device")
+    print(
+        "MPS is not available. Falling back to CPU, which may be very slow. "
+        "Consider using a GPU for better performance or use CUDA for your device."
+    )
+    return "cpu", torch.float32
+
+
+def load_pipeline(model_path: str, dtype):
+    try:
+        from diffusers import StableDiffusionPipeline
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "diffusers is required to run the baseline script. Install it before running inference."
+        ) from exc
+
+    return StableDiffusionPipeline.from_pretrained(
+        model_path,
+        torch_dtype=dtype,
+        safety_checker=None,
+        requires_safety_checker=False,
+    )
+
 
 def slugify(text: str) -> str:
     cleaned = "".join(c.lower() if c.isalnum() else "_" for c in text)
@@ -45,7 +64,7 @@ def main():
 
     device, dtype = get_device_and_dtype()
 
-    pipe = StableDiffusionPipeline.from_pretrained(MODEL_PATH, torch_dtype=dtype, safety_checker=None, requires_safety_checker=False)
+    pipe = load_pipeline(MODEL_PATH, dtype=dtype)
     pipe = pipe.to(device)
 
     rows = []
