@@ -6,5 +6,10 @@ __pycache__/
 
 artifacts/hf_cache/
 artifacts/models/
-artifacts/outputs/
+.vscode
+tests 
+artifacts/results/ollama_step_cache.jsonl
+
+
+
 
