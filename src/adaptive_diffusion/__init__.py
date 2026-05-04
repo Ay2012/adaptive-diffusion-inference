@@ -1,17 +1,39 @@
+from adaptive_diffusion.benchmark import (
+    BenchmarkConfig,
+    DEFAULT_MODEL_PATH,
+    DEFAULT_OUTPUT_ROOT,
+    DEFAULT_PROMPT_FILE,
+    DEFAULT_RAW_STEPS,
+    DEFAULT_RESULTS_DIR,
+    SinglePromptConfig,
+    SinglePromptResult,
+    load_prompts,
+    run_benchmark,
+    run_single_prompt,
+)
+from adaptive_diffusion.early_stopping import LatentConvergenceEarlyStopper
 from adaptive_diffusion.step_controller import (
-    DEFAULT_DECISION_CACHE,
     OllamaStepController,
     StepDecision,
     StepDecisionError,
-    build_cache_key,
     normalize_prompt,
 )
 
 __all__ = [
-    "DEFAULT_DECISION_CACHE",
+    "BenchmarkConfig",
+    "DEFAULT_MODEL_PATH",
+    "DEFAULT_OUTPUT_ROOT",
+    "DEFAULT_PROMPT_FILE",
+    "DEFAULT_RAW_STEPS",
+    "DEFAULT_RESULTS_DIR",
+    "SinglePromptConfig",
+    "SinglePromptResult",
+    "LatentConvergenceEarlyStopper",
     "OllamaStepController",
     "StepDecision",
     "StepDecisionError",
-    "build_cache_key",
+    "load_prompts",
     "normalize_prompt",
+    "run_benchmark",
+    "run_single_prompt",
 ]
