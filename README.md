@@ -1,18 +1,18 @@
 # Model-Agnostic Runtime Adaptors for Efficient Diffusion Inference
 
-This project studies how to reduce diffusion model inference cost while preserving output quality. The current baseline uses Stable Diffusion v1.5 with Hugging Face Diffusers. The first stage of the project focuses on downloading the model, running fixed baseline generations, and recording latency for later comparison.
+This project benchmarks one simple question: how much latency changes when a prompt
+uses an adaptive diffusion path instead of a raw fixed-step generation path.
 
-## Project Goal
+For each prompt, the runner now performs both paths:
 
-The long-term goal is to build a runtime adapter that improves diffusion inference efficiency without retraining the underlying model. The baseline stage establishes a reproducible setup for measuring inference latency and output quality before introducing optimization methods such as adaptive sampling, scheduler changes, and early stopping strategies.
+- adaptive: Ollama chooses `num_inference_steps`, latent-convergence early stopping is attached, then the image is generated
+- raw: the image is generated directly with a fixed step count
 
-## Current Scope
+The benchmark writes one CSV row per prompt with exactly three columns:
 
-- Download and save Stable Diffusion v1.5 locally
-- Run baseline text-to-image inference
-- Save generated images
-- Record per-image latency and run metadata in CSV format
-- Prepare a clean structure for future optimization experiments
+```text
+prompt,adaptive_latency,raw_latency
+```
 
 ## Project Structure
 
@@ -23,123 +23,109 @@ The long-term goal is to build a runtime adapter that improves diffusion inferen
 │   ├── models/
 │   ├── outputs/
 │   └── results/
-├── scripts/
-│   ├── download_model.py
-│   └── run_baseline.py
 ├── src/
+│   ├── adaptive_diffusion/
+│   │   ├── llm/
+│   │   │   └── ollama_client.py
+│   │   ├── benchmark.py
+│   │   ├── early_stopping.py
+│   │   └── step_controller.py
+│   ├── benchmark_runner.py
+│   └── download_model.py
+├── prompts_complexity.txt
 ├── requirements.txt
 └── README.md
-``` 
+```
 
 ## Setup
 
 Create and activate a virtual environment from the project root:
-``` text 
+
+```text
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-## Install dependencies:
-``` text
+Install dependencies:
+
+```text
 pip install -r requirements.txt
 ```
 
-## Model Download
+Download and pin the Stable Diffusion v1.5 weights locally:
 
-The model is downloaded from Hugging Face and saved locally for reproducible baseline experiments.
-
-Run:
-``` text
-python scripts/download_model.py
+```text
+python src/download_model.py
 ```
 
-This saves the baseline model to:
-```text 
+This saves the model under:
+
+```text
 artifacts/models/stable-diffusion-v1-5/
 ```
 
-## Baseline Inference
+## Ollama
 
-Run baseline generation with fixed prompts and settings:
-``` text
-python scripts/run_baseline.py
+The adaptive path calls Ollama once per prompt to choose an integer step count
+between 5 and 50.
+
+```text
+export OLLAMA_URL=http://localhost:11434
+export OLLAMA_MODEL=phi4-mini
 ```
 
-This script:
+You can override the model for a single run with `--ollama-model`.
 
-* loads the local Stable Diffusion v1.5 model
+## Running The Benchmark
 
-* generates one image per prompt
+```text
+python src/benchmark_runner.py \
+  --run-name latency_eval \
+  --prompt-file prompts_complexity.txt
+```
 
-* saves output images in artifacts/outputs/baseline/
+Optional controls:
 
-* saves per-image metrics in artifacts/results/baseline_metrics.csv
+```text
+python src/benchmark_runner.py \
+  --run-name latency_eval \
+  --prompt-file prompts_complexity.txt \
+  --raw-steps 50 \
+  --guidance-scale 7.5 \
+  --height 512 \
+  --width 512 \
+  --seed 42 \
+  --ollama-model phi4-mini
+```
 
-## Metrics Recorded
+Each run:
 
-The baseline CSV currently stores:
+- loads prompts from a text file, one non-empty prompt per line
+- loads the local Stable Diffusion pipeline once
+- runs adaptive and raw generation for every prompt
+- saves adaptive images to `artifacts/outputs/<run-name>/adaptive/`
+- saves raw images to `artifacts/outputs/<run-name>/raw/`
+- saves latency results to `artifacts/results/<run-name>.csv`
 
-* prompt_id
+Latency excludes pipeline load time and image saving time. `adaptive_latency`
+includes the Ollama step decision, early-stop setup, and image generation.
+`raw_latency` includes only raw image generation.
 
-* prompt
+## Running The Streamlit UI
 
-* seed
+```text
+streamlit run src/streamlit_app.py
+```
 
-* steps
+The UI accepts one prompt at a time, runs the adaptive and raw paths, and shows
+both generated images with their latencies. UI images are kept in memory for
+display and are not saved to `artifacts/outputs/`.
 
-* guidance_scale
+## Notes
 
-* height
-
-* width
-
-* device
-
-* dtype
-
-* latency_seconds
-
-* image_path
-
-At this stage, the main measured metric is inference latency per generated image.
-
-## Baseline Configuration
-
-Current baseline settings:
-
-* Model: Stable Diffusion v1.5
-
-* Resolution: 512 x 512
-
-* Guidance scale: 7.5
-
-* Seed: 42
-
-* Inference steps: 50
-
-These values may later be compared against lower-step baselines such as 20-step generation.
-
-Notes
-
-* artifacts/hf_cache/ is used for Hugging Face cache and is not intended for version control.
-
-* artifacts/models/ stores the pinned local model used for experiments.
-
-* artifacts/outputs/ and artifacts/results/ can be tracked selectively to document baseline runs.
-
-* Large model weights and cache files should not be pushed to GitHub.
-
-## Next Steps
-
-* Add 20-step baseline comparison
-
-* Evaluate different schedulers
-
-* Log aggregate metrics such as mean latency
-
-* Add quality metrics such as CLIP score and LPIPS
-
-* Implement and benchmark runtime adaptation methods
+- `artifacts/hf_cache/` stores the Hugging Face cache and should not be committed.
+- `artifacts/models/` stores local model weights and should stay out of GitHub.
+- `artifacts/outputs/` and `artifacts/results/` are generated experiment outputs.
 
 ## License
 

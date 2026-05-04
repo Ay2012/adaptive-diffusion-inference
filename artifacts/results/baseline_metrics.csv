@@ -1,6 +1,0 @@
-prompt_id,prompt,seed,steps,guidance_scale,height,width,device,dtype,latency_seconds,image_path
-1,a photo of an astronaut riding a horse on mars,42,50,7.5,512,512,mps,torch.float16,74.2429,artifacts/outputs/baseline/01_a_photo_of_an_astronaut_riding_a_horse_on_mars.png
-2,a cinematic portrait of a medieval king in golden armor,42,50,7.5,512,512,mps,torch.float16,72.2865,artifacts/outputs/baseline/02_a_cinematic_portrait_of_a_medieval_king_in_golden_armor.png
-3,a cozy cabin in snowy mountains at sunset,42,50,7.5,512,512,mps,torch.float16,71.1464,artifacts/outputs/baseline/03_a_cozy_cabin_in_snowy_mountains_at_sunset.png
-4,a futuristic city street in the rain at night,42,50,7.5,512,512,mps,torch.float16,71.088,artifacts/outputs/baseline/04_a_futuristic_city_street_in_the_rain_at_night.png
-5,"a bowl of fresh fruit on a wooden table, realistic photography",42,50,7.5,512,512,mps,torch.float16,69.8815,artifacts/outputs/baseline/05_a_bowl_of_fresh_fruit_on_a_wooden_table_realistic_photography.png
