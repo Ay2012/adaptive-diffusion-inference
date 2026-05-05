@@ -6,6 +6,10 @@ from pathlib import Path
 import time
 from typing import Any, Callable
 
+from adaptive_diffusion.clip_metrics import (
+    DEFAULT_CLIP_MODEL_PATH,
+    LocalClipScorer,
+)
 from adaptive_diffusion.early_stopping import LatentConvergenceEarlyStopper
 from adaptive_diffusion.step_controller import OllamaStepController
 
@@ -20,7 +24,13 @@ EARLY_STOP_TAU = 0.03
 EARLY_STOP_PATIENCE = 3
 EARLY_STOP_MIN_STEPS = 8
 
-CSV_FIELDNAMES = ["prompt", "adaptive_latency", "raw_latency"]
+CSV_FIELDNAMES = [
+    "prompt",
+    "adaptive_latency",
+    "raw_latency",
+    "adaptive_clip_score",
+    "raw_clip_score",
+]
 
 
 @dataclass(frozen=True)
@@ -36,6 +46,7 @@ class BenchmarkConfig:
     width: int = 512
     seed: int = 42
     ollama_model: str | None = None
+    clip_model_path: str = DEFAULT_CLIP_MODEL_PATH
 
 
 @dataclass(frozen=True)
@@ -116,10 +127,12 @@ def run_benchmark(
     *,
     pipeline: Any | None = None,
     step_controller: Any | None = None,
+    clip_scorer: Any | None = None,
     torch_module: Any | None = None,
     perf_counter: Callable[[], float] = time.perf_counter,
 ) -> Path:
     _validate_config(config)
+    scorer = clip_scorer or _build_clip_scorer(config)
 
     prompts = load_prompts(config.prompt_file)
     output_dir = Path(config.output_root) / config.run_name
@@ -161,6 +174,9 @@ def run_benchmark(
             perf_counter=perf_counter,
         )
 
+        adaptive_clip_score = scorer.score(prompt, adaptive_image)
+        raw_clip_score = scorer.score(prompt, raw_image)
+
         adaptive_image.save(adaptive_dir / f"{index}.png")
         raw_image.save(raw_dir / f"{index}.png")
 
@@ -169,11 +185,14 @@ def run_benchmark(
                 "prompt": prompt,
                 "adaptive_latency": round(adaptive_latency, 4),
                 "raw_latency": round(raw_latency, 4),
+                "adaptive_clip_score": round(adaptive_clip_score, 4),
+                "raw_clip_score": round(raw_clip_score, 4),
             }
         )
         print(
             f"[{index}/{len(prompts)}] prompt benchmarked | "
-            f"adaptive={adaptive_latency:.4f}s | raw={raw_latency:.4f}s"
+            f"adaptive={adaptive_latency:.4f}s | raw={raw_latency:.4f}s | "
+            f"adaptive_clip={adaptive_clip_score:.4f} | raw_clip={raw_clip_score:.4f}"
         )
 
     with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
@@ -298,6 +317,10 @@ def _build_generator(torch_module: Any, device: str, seed: int) -> Any:
     return torch_module.Generator(device=device).manual_seed(seed)
 
 
+def _build_clip_scorer(config: BenchmarkConfig) -> LocalClipScorer:
+    return LocalClipScorer(model_path=config.clip_model_path)
+
+
 def _validate_config(config: BenchmarkConfig) -> None:
     if not config.run_name.strip():
         raise ValueError("run_name is required.")
@@ -305,6 +328,8 @@ def _validate_config(config: BenchmarkConfig) -> None:
         raise ValueError("raw_steps must be at least 1.")
     if config.height < 1 or config.width < 1:
         raise ValueError("height and width must be positive.")
+    if not config.clip_model_path.strip():
+        raise ValueError("clip_model_path is required.")
 
 
 def _validate_single_prompt_config(config: SinglePromptConfig) -> None:
