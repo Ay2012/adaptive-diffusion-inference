@@ -4,6 +4,7 @@ import argparse
 
 from adaptive_diffusion import (
     BenchmarkConfig,
+    DEFAULT_CLIP_MODEL_PATH,
     DEFAULT_MODEL_PATH,
     DEFAULT_OUTPUT_ROOT,
     DEFAULT_PROMPT_FILE,
@@ -28,12 +29,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--ollama-model", default=None)
+    parser.add_argument("--clip-model-path", default=DEFAULT_CLIP_MODEL_PATH)
 
     args = parser.parse_args(argv)
     if args.raw_steps < 1:
         parser.error("--raw-steps must be at least 1.")
     if args.height < 1 or args.width < 1:
         parser.error("--height and --width must be positive.")
+    if not args.clip_model_path.strip():
+        parser.error("--clip-model-path is required.")
     return args
 
 
@@ -52,6 +56,7 @@ def main(argv: list[str] | None = None) -> None:
             width=args.width,
             seed=args.seed,
             ollama_model=args.ollama_model,
+            clip_model_path=args.clip_model_path,
         )
     )
 

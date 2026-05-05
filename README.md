@@ -8,10 +8,11 @@ For each prompt, the runner now performs both paths:
 - adaptive: Ollama chooses `num_inference_steps`, latent-convergence early stopping is attached, then the image is generated
 - raw: the image is generated directly with a fixed step count
 
-The benchmark writes one CSV row per prompt with exactly three columns:
+The benchmark writes one CSV row per prompt with latency and CLIP alignment
+metrics:
 
 ```text
-prompt,adaptive_latency,raw_latency
+prompt,adaptive_latency,raw_latency,adaptive_clip_score,raw_clip_score
 ```
 
 ## Project Structure
@@ -31,6 +32,7 @@ prompt,adaptive_latency,raw_latency
 │   │   ├── early_stopping.py
 │   │   └── step_controller.py
 │   ├── benchmark_runner.py
+│   ├── download_clip_model.py
 │   └── download_model.py
 ├── prompts_complexity.txt
 ├── requirements.txt
@@ -64,6 +66,18 @@ This saves the model under:
 artifacts/models/stable-diffusion-v1-5/
 ```
 
+Download and pin the CLIP scoring model locally:
+
+```text
+python src/download_clip_model.py
+```
+
+This saves the model and processor under:
+
+```text
+artifacts/models/clip-vit-base-patch32/
+```
+
 ## Ollama
 
 The adaptive path calls Ollama once per prompt to choose an integer step count
@@ -75,6 +89,12 @@ export OLLAMA_MODEL=phi4-mini
 ```
 
 You can override the model for a single run with `--ollama-model`.
+
+## CLIP Scoring
+
+The benchmark loads a local `openai/clip-vit-base-patch32` model once per run and
+computes one prompt-image alignment score for each adaptive and raw image. Scores
+are cosine similarities converted to the 0-1 range.
 
 ## Running The Benchmark
 
@@ -95,21 +115,25 @@ python src/benchmark_runner.py \
   --height 512 \
   --width 512 \
   --seed 42 \
-  --ollama-model phi4-mini
+  --ollama-model phi4-mini \
+  --clip-model-path artifacts/models/clip-vit-base-patch32
 ```
 
 Each run:
 
 - loads prompts from a text file, one non-empty prompt per line
 - loads the local Stable Diffusion pipeline once
+- loads the local CLIP scorer once
 - runs adaptive and raw generation for every prompt
+- scores each generated image against its prompt
 - saves adaptive images to `artifacts/outputs/<run-name>/adaptive/`
 - saves raw images to `artifacts/outputs/<run-name>/raw/`
-- saves latency results to `artifacts/results/<run-name>.csv`
+- saves latency and CLIP score results to `artifacts/results/<run-name>.csv`
 
 Latency excludes pipeline load time and image saving time. `adaptive_latency`
 includes the Ollama step decision, early-stop setup, and image generation.
-`raw_latency` includes only raw image generation.
+`raw_latency` includes only raw image generation. CLIP scoring time is not
+included in either latency column.
 
 ## Running The Streamlit UI
 
